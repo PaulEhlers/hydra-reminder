@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	github.com/getlantern/systray v1.2.2
+	golang.design/x/hotkey v0.4.1
 	golang.org/x/sys v0.41.0
 )
 

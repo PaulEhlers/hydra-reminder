@@ -47,7 +47,7 @@ sudo pacman -S gcc gtk3 libayatana-appindicator libx11
 **Build**
 ```bash
 go mod tidy
-go build -o hydra-reminder ./cmd/hydra-reminder
+go build -o hydra-reminder-linux ./cmd/hydra-reminder
 ```
 
 ## Open Source Dependencies & Licenses

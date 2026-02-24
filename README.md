@@ -23,7 +23,7 @@ A minimalist, frictionless tray application that reminds you to stand up or drin
 
 ## Developer Build Requirements
 
-- **Go 1.22+**
+- **Go 1.25+**
 
 ### Windows
 ```bash

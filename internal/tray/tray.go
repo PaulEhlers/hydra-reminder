@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/getlantern/systray"
@@ -86,7 +87,13 @@ func (t *TrayApp) onReady() {
 	systray.AddSeparator()
 
 	mHotkeyMenu := systray.AddMenuItem("Global Hotkeys", "Configure hotkeys")
-	mHotkeyEnable := mHotkeyMenu.AddSubMenuItemCheckbox("Enable (CTRL+ALT prefix)", "", t.cfg.HotkeyEnabled)
+	
+	mPrefixMenu := mHotkeyMenu.AddSubMenuItem("Prefix Shortcut...", "")
+	mPrefCtrlAlt := mPrefixMenu.AddSubMenuItemCheckbox("CTRL + ALT", "", t.cfg.HotkeyModifiers == 0x0003)
+	mPrefCtrlShift := mPrefixMenu.AddSubMenuItemCheckbox("CTRL + SHIFT", "", t.cfg.HotkeyModifiers == 0x0006)
+	mPrefSuperShift := mPrefixMenu.AddSubMenuItemCheckbox("SUPER + SHIFT", "", t.cfg.HotkeyModifiers == 0x000C)
+
+	mHotkeyEnable := mHotkeyMenu.AddSubMenuItemCheckbox("Enable Hotkey", "", t.cfg.HotkeyEnabled)
 
 	mSetReset := mHotkeyMenu.AddSubMenuItem("Set Reset Key...", "")
 
@@ -128,6 +135,8 @@ func (t *TrayApp) onReady() {
 		}
 	}()
 
+	var lastRadioChange time.Time
+
 	// Event handling
 	go func() {
 		for {
@@ -137,15 +146,15 @@ func (t *TrayApp) onReady() {
 			case <-mReset.ClickedCh:
 				t.timerManager.Reset()
 			case <-mDir10s.ClickedCh:
-				t.setDuration(0, mDir10s, mDir15, mDir30, mDir45, mDir60)
+				t.handleDurationClick(&lastRadioChange, 0, mDir10s, mDir15, mDir30, mDir45, mDir60)
 			case <-mDir15.ClickedCh:
-				t.setDuration(15, mDir10s, mDir15, mDir30, mDir45, mDir60)
+				t.handleDurationClick(&lastRadioChange, 15, mDir10s, mDir15, mDir30, mDir45, mDir60)
 			case <-mDir30.ClickedCh:
-				t.setDuration(30, mDir10s, mDir15, mDir30, mDir45, mDir60)
+				t.handleDurationClick(&lastRadioChange, 30, mDir10s, mDir15, mDir30, mDir45, mDir60)
 			case <-mDir45.ClickedCh:
-				t.setDuration(45, mDir10s, mDir15, mDir30, mDir45, mDir60)
+				t.handleDurationClick(&lastRadioChange, 45, mDir10s, mDir15, mDir30, mDir45, mDir60)
 			case <-mDir60.ClickedCh:
-				t.setDuration(60, mDir10s, mDir15, mDir30, mDir45, mDir60)
+				t.handleDurationClick(&lastRadioChange, 60, mDir10s, mDir15, mDir30, mDir45, mDir60)
 			case <-mStyle.ClickedCh:
 				if t.cfg.AlertStyle == "color" {
 					t.cfg.AlertStyle = "blink"
@@ -155,6 +164,12 @@ func (t *TrayApp) onReady() {
 					mStyle.Uncheck()
 				}
 				t.saveConfig()
+			case <-mPrefCtrlAlt.ClickedCh:
+				t.setHotkeyModifier(&lastRadioChange, 0x0003, mPrefCtrlAlt, mPrefCtrlShift, mPrefSuperShift)
+			case <-mPrefCtrlShift.ClickedCh:
+				t.setHotkeyModifier(&lastRadioChange, 0x0006, mPrefCtrlAlt, mPrefCtrlShift, mPrefSuperShift)
+			case <-mPrefSuperShift.ClickedCh:
+				t.setHotkeyModifier(&lastRadioChange, 0x000C, mPrefCtrlAlt, mPrefCtrlShift, mPrefSuperShift)
 			case <-mHotkeyEnable.ClickedCh:
 				t.cfg.HotkeyEnabled = !t.cfg.HotkeyEnabled
 				if t.cfg.HotkeyEnabled {
@@ -181,15 +196,28 @@ func (t *TrayApp) onReady() {
 		}
 	}()
 
+	var hotkeyMu sync.Mutex
+	var lastHotkeyChange time.Time
+
 	// Handle dynamic hotkey menus
 	for i, item := range resetItems {
 		go func(index int, mi *systray.MenuItem) {
 			for range mi.ClickedCh {
+				hotkeyMu.Lock()
+				if time.Since(lastHotkeyChange) < 150*time.Millisecond {
+					hotkeyMu.Unlock()
+					continue
+				}
+				lastHotkeyChange = time.Now()
+				hotkeyMu.Unlock()
+
 				t.cfg.HotkeyResetKey = uint32('A' + index)
 				t.saveConfig()
 
 				for _, other := range resetItems {
-					other.Uncheck()
+					if other != mi {
+						other.Uncheck()
+					}
 				}
 				mi.Check()
 
@@ -254,6 +282,14 @@ func (t *TrayApp) onReady() {
 	t.OnRunning()
 }
 
+func (t *TrayApp) handleDurationClick(lastChange *time.Time, mins int, items ...*systray.MenuItem) {
+	if time.Since(*lastChange) < 150*time.Millisecond {
+		return
+	}
+	*lastChange = time.Now()
+	t.setDuration(mins, items...)
+}
+
 func (t *TrayApp) setDuration(mins int, items ...*systray.MenuItem) {
 	for i, item := range items {
 		opts := []int{0, 15, 30, 45, 60}
@@ -275,6 +311,28 @@ func (t *TrayApp) setDuration(mins int, items ...*systray.MenuItem) {
 
 	t.timerManager.Start(dur)
 	t.OnRunning()
+}
+
+func (t *TrayApp) setHotkeyModifier(lastChange *time.Time, modifier uint32, items ...*systray.MenuItem) {
+	if time.Since(*lastChange) < 150*time.Millisecond {
+		return
+	}
+	*lastChange = time.Now()
+
+	opts := []uint32{0x0003, 0x0006, 0x000C}
+	for i, item := range items {
+		if opts[i] == modifier {
+			item.Check()
+		} else {
+			item.Uncheck()
+		}
+	}
+
+	t.cfg.HotkeyModifiers = modifier
+	t.saveConfig()
+	if t.cfg.HotkeyEnabled {
+		hotkey.Register(t.cfg.HotkeyModifiers, t.cfg.HotkeyResetKey)
+	}
 }
 
 func (t *TrayApp) OnRunning() {

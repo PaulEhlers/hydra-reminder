@@ -2,11 +2,44 @@
 
 package tray
 
-// monitorMenuOpen on Linux/macOS doesn't easily have a global "menu opened" hook
-// like Windows #32768 class. The getlantern/systray library doesn't expose
-// a cross-platform 'menu opened' event.
-// We'll leave this as a no-op on non-Windows for now, meaning the "auto reset when alerting
-// and menu opened" feature is Windows-only. Users on Linux can still click the reset button.
+import (
+	"bufio"
+	"os/exec"
+	"strings"
+
+	"hydra-reminder/internal/timer"
+)
+
+// monitorMenuOpen on Linux uses dbus-monitor to detect when the user interacts
+// with the tray app indicator (e.g. clicks it to open the menu).
 func (t *TrayApp) monitorMenuOpen() {
-	// No-op on linux/macOS
+	// Monitor the StatusNotifierItem interface for interaction methods
+	// Use stdbuf -oL to prevent block buffering when piping stdout.
+	cmd := exec.Command("stdbuf", "-oL", "dbus-monitor", "--session", "interface='org.kde.StatusNotifierItem'")
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		return
+	}
+	defer cmd.Process.Kill()
+
+	scanner := bufio.NewScanner(stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// The host environment calls these methods when the user interacts with the tray icon.
+		if strings.Contains(line, "member=AboutToShow") ||
+			strings.Contains(line, "member=ContextMenu") ||
+			strings.Contains(line, "member=Activate") ||
+			strings.Contains(line, "member=SecondaryActivate") ||
+			strings.Contains(line, "member=SecondaryClick") ||
+			strings.Contains(line, "member=Scroll") {
+
+			if t.timerManager != nil && t.timerManager.GetState() == timer.StateAlerting {
+				t.timerManager.Reset()
+			}
+		}
+	}
 }

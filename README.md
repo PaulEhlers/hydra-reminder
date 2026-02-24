@@ -5,56 +5,46 @@ A minimalist, frictionless tray application that reminds you to stand up or drin
 ## Features
 - **Zero Distractions**: No popups, no sounds, no modal windows. Alerts use a simple red icon and optional blinking.
 - **Minimal Footprint**: Lightweight tray application with ~0% CPU and <15MB RAM usage.
-- **Smart UI**: Right-click the tray icon to check the remaining time, configure durations, and manage hotkeys natively.
-- **Global Hotkey**: Press `CTRL + ALT + <Key>` to instantly reset your active timer from anywhere.
+- **Smart UI**: Single-click the tray icon to check time/reset, right-click to configure durations natively.
+- **Global Hotkey**: Press `Modifier + <Key>` to instantly reset your active timer from anywhere (configurable prefixes like `CTRL+SHIFT`).
 - **Auto-Start**: Integrates with the OS to start on boot (Windows Registry / Linux XDG autostart).
 
 ## Platform Support
 
-| Feature              | Windows       | Linux (X11)       |
-|----------------------|---------------|-------------------|
-| Tray Icon & Menu     | ✅ Native      | ✅ via libayatana  |
-| Global Hotkeys       | ✅ Win32 API   | ✅ via X11 (libX11)|
-| Autostart            | ✅ Registry    | ✅ XDG `.desktop`  |
-| Auto-reset on menu   | ✅             | ❌ (use Reset btn) |
+| Feature               | Windows       | Linux (X11)         |
+|-----------------------|---------------|---------------------|
+| Tray Icon & Menu      | ✅ Native      | ✅ libayatana        |
+| Global Hotkeys        | ✅ Win32 API   | ✅ libX11            |
+| Autostart             | ✅ Registry    | ✅ XDG `.desktop`    |
+| Click-to-Reset        | ✅             | ✅ `dbus-monitor`    |
 
-> **Note:** Linux support requires X11. Wayland-only environments are not currently supported for global hotkeys.
-> The distro doesn't matter — any Linux desktop with a system tray (GNOME, KDE, XFCE, etc.) will work.
-
-## Making the Icon Visible
-
-### Windows 11
-1. Open **Settings** > **Personalization** > **Taskbar**.
-2. Expand **Other system tray icons**.
-3. Toggle **HydraReminder** to **On**.
-
-### Windows 10
-1. Open **Settings** > **Personalization** > **Taskbar**.
-2. Click **Select which icons appear on the taskbar**.
-3. Toggle **HydraReminder** to **On**.
-
-### Linux (GNOME)
-GNOME hides tray icons by default. Install the [AppIndicator extension](https://extensions.gnome.org/extension/615/appindicator-support/) to see tray icons.
+> **Note:** Linux support requires an X11 session. Wayland environments will block background global hotkeys. 
+> Ensure you have a system tray or AppIndicator extension enabled (e.g., for GNOME).
 
 ## Developer Build Requirements
 
 - **Go 1.22+**
 
-### Windows Build
-
+### Windows
 ```bash
 go mod tidy
 go build -ldflags="-H=windowsgui" -o hydra-reminder.exe ./cmd/hydra-reminder
 ```
 
-### Linux Build
+### Linux
+Requires GCC and development headers for GTK3, libX11, and libayatana.
 
-Install dependencies first:
+**Ubuntu / Debian**
 ```bash
 sudo apt install -y gcc libgtk-3-dev libayatana-appindicator3-dev libx11-dev
 ```
 
-Then build:
+**Arch Linux / CachyOS / Manjaro**
+```bash
+sudo pacman -S gcc gtk3 libayatana-appindicator libx11
+```
+
+**Build**
 ```bash
 go mod tidy
 go build -o hydra-reminder ./cmd/hydra-reminder
